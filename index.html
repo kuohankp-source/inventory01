@@ -111,6 +111,11 @@ table.items tr.nm td{border-bottom:0;padding-bottom:0;padding-top:10px}
 .leadbar{display:flex;align-items:center;gap:10px;background:var(--lead);color:#fff;border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:14.5px}
 .leadbar b{font-weight:700}.leadbar .sp{flex:1}.leadbar button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:8px;padding:5px 12px;cursor:pointer;font-weight:500}
 .next{margin-top:18px}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.filters .full{grid-column:1 / -1}
+.filters label.f{margin-top:8px}
+.closed-info{font-size:13px;color:var(--muted);margin-top:2px}
+.more{margin:6px 0 18px}
 .choices{display:flex;flex-wrap:wrap;gap:8px}
 .choice{border:1.5px solid var(--line);background:var(--bg);color:var(--muted);border-radius:10px;padding:9px 14px;min-height:44px;cursor:pointer;font-weight:500}
 .choice[aria-pressed="true"]{background:var(--ink);color:var(--card);border-color:var(--ink)}
@@ -285,7 +290,9 @@ function bindTop(back){
   const lo = document.getElementById('leadout'); if(lo) lo.onclick = () => leadLogout(false);
 }
 function refreshView(){
-  if(S.view && S.view.type === 'case') openCase(S.view.id); else if(S.home) renderHome();
+  if(S.view && S.view.type === 'case') openCase(S.view.id);
+  else if(S.view && S.view.type === 'history') renderHistory(false);
+  else if(S.home) renderHome();
 }
 function clearLead(){ S.lead = null; try { sessionStorage.removeItem('inv_lead'); } catch(e){} }
 function leadLogin(){
@@ -360,7 +367,7 @@ function ask(opt){
 function caseCard(c){
   const dl = c.deadline ? `\x3Cspan class="${c.overdue ? 'late' : 'm'}">期限 ${day(c.deadline)}${c.overdue ? '（逾期）' : ''}\x3C/span>` : '';
   return `\x3Cbutton class="card case ${esc(c.stage)}" data-case="${esc(c.id)}">\x3Cdiv class="t">\x3Cspan class="id">${esc(c.id)}\x3C/span>\x3Cspan class="chip ${esc(c.stage)}">${esc(c.status)}\x3C/span>${c.stage === '盤點長' && c.progress ? `\x3Cspan class="progress">${esc(c.progress)}\x3C/span>` : ''}${dl}\x3C/div>
-    \x3Cdiv class="m">${esc(c.store)}｜型號 ${esc(c.model)}｜現貨−系統 ${signed(c.diff)}｜${esc(c.scene)}・${esc(c.finder)}\x3C/div>\x3C/button>`;
+    \x3Cdiv class="m">${esc(c.store)}｜型號 ${esc(c.model)}｜現貨−系統 ${signed(c.diff)}｜${esc(c.scene)}・${esc(c.finder)}\x3C/div>${c.closedAt ? `\x3Cdiv class="closed-info">開單 ${day(c.created)}・${esc(c.status)} ${day(c.closedAt)}${c.closeType && c.closeType !== '撤銷' ? '・' + esc(c.closeType) : ''}\x3C/div>` : ''}\x3C/button>`;
 }
 function section(title, list, empty){
   return `\x3Ch2>${esc(title)}（${list.length}）\x3C/h2>${list.length ? list.map(caseCard).join('') : `\x3Cp class="empty">${esc(empty)}\x3C/p>`}`;
@@ -375,7 +382,7 @@ function renderHome(){
   const h = S.home;
   const storeTitle = h.account.store === '全部' ? '門市待辦' : '本店待辦';
   $app.innerHTML = topBar(false) + `
-    \x3Cbutton class="btn primary block" id="new">＋ 開新盤點單\x3C/button>
+    \x3Cbutton class="btn primary block" id="new">＋ 開新盤點單\x3C/button>\x3Cbutton class="btn block" id="hist" style="margin-top:8px">歷史案件查詢\x3C/button>
     ${h.drafts.length ? section('未送出的草稿', h.drafts, '') : ''}
     ${section(storeTitle, h.store, '目前沒有需要門市處理的案件。')}
     ${section('盤點長待辦', h.lead, '目前沒有等盤點長處理的案件。')}
@@ -385,6 +392,7 @@ function renderHome(){
     \x3Cp style="margin-top:20px">\x3Cbutton class="link" id="reload">重新整理\x3C/button>\x3C/p>`;
   bindTop();
   document.getElementById('new').onclick = renderNew;
+  document.getElementById('hist').onclick = () => renderHistory(false);
   document.getElementById('reload').onclick = openHome;
   document.getElementById('qgo').onclick = () => { const v = document.getElementById('q').value.trim().toUpperCase(); if(v) openCase(v); };
   $app.querySelectorAll('[data-case]').forEach(b => b.onclick = () => openCase(b.dataset.case));
@@ -562,7 +570,7 @@ function renderCase(d){
     \x3Ch2>處理紀錄\x3C/h2>\x3Cdiv class="card">\x3Cul class="tl">${d.events.map(e => `\x3Cli>\x3Cdiv class="w">${when(e.at)}・${esc(e.by)}${e.device ? '・' + esc(e.device) : ''}\x3C/div>\x3Cb>${esc(e.action)}\x3C/b>${e.to && e.to !== e.from ? `\x3Cspan class="empty">　→ ${esc(e.to)}\x3C/span>` : ''}${e.content ? `\x3Cp>${esc(e.content)}\x3C/p>` : ''}\x3C/li>`).join('')}\x3C/ul>\x3C/div>
     \x3Cp>\x3Cbutton class="link" id="reload">重新整理\x3C/button>\x3C/p>
     ${draft ? `\x3Cdiv class="actions">\x3Cbutton class="btn primary" id="finalize">送出盤點單\x3C/button>\x3C/div>` : final ? '' : nextStepHtml(c, d)}`;
-  bindTop(() => openHome());
+  bindTop(() => { if(S.backTo === 'history'){ S.backTo = null; renderHistory(true); } else openHome(); });
   document.getElementById('reload').onclick = () => openCase(c.id);
   $app.querySelectorAll('[data-photo]').forEach(b => b.onclick = () => openPhoto(b.dataset.photo, b.querySelector('img').src));
 
@@ -596,6 +604,56 @@ function renderCase(d){
   };
 
   bindNextStep(c, d);
+}
+
+/* ---------- 歷史案件查詢 ---------- */
+// keep=true：從案件頁返回時，保留原本的條件與結果
+function renderHistory(keep){
+  S.view = { type: 'history' };
+  if(!keep || !S.hist) S.hist = { q: { status: 'done' }, items: [], total: null };
+  const h = S.home, q = S.hist.q;
+  const allStores = h.account.store === '全部' || !!S.lead;
+  const opt = (v, t) => `\x3Coption value="${esc(v)}" ${q.status === v ? 'selected' : ''}>${esc(t)}\x3C/option>`;
+  $app.innerHTML = topBar(true) + `\x3Ch1>歷史案件查詢\x3C/h1>
+    \x3Cp class="empty" style="margin-top:-6px">${allStores ? '可查詢三間門市的案件。' : '查詢本店（' + esc(h.account.store) + '）的案件。'}\x3C/p>
+    \x3Cdiv class="card">\x3Cdiv class="filters">
+      \x3Cdiv>\x3Clabel class="f" for="hs">狀態\x3C/label>\x3Cselect id="hs">${opt('done', '已結案＋已撤銷')}${opt('closed', '已結案')}${opt('cancelled', '已撤銷')}${opt('open', '進行中')}${opt('all', '全部')}\x3C/select>\x3C/div>
+      ${allStores ? `\x3Cdiv>\x3Clabel class="f" for="hst">分店\x3C/label>\x3Cselect id="hst">\x3Coption value="">全部分店\x3C/option>${h.stores.map(x => `\x3Coption ${q.store === x ? 'selected' : ''}>${esc(x)}\x3C/option>`).join('')}\x3C/select>\x3C/div>` : '\x3Cdiv>\x3C/div>'}
+      \x3Cdiv>\x3Clabel class="f" for="hf">立案時間：從\x3C/label>\x3Cinput type="date" id="hf" value="${esc(q.from || '')}">\x3C/div>
+      \x3Cdiv>\x3Clabel class="f" for="ht">到\x3C/label>\x3Cinput type="date" id="ht" value="${esc(q.to || '')}">\x3C/div>
+      \x3Cdiv>\x3Clabel class="f" for="hb">廠牌\x3C/label>\x3Cselect id="hb">\x3Coption value="">全部廠牌\x3C/option>${(h.brands || []).map(x => `\x3Coption ${q.brand === x ? 'selected' : ''}>${esc(x)}\x3C/option>`).join('')}\x3C/select>\x3C/div>
+      \x3Cdiv>\x3Clabel class="f" for="hm">型號或商品編碼\x3C/label>\x3Cinput type="search" id="hm" value="${esc(q.model || '')}" placeholder="例如 803">\x3C/div>
+      \x3Cdiv class="full">\x3Clabel class="f" for="hp">涉及人員（代碼或名字）\x3C/label>\x3Cinput type="search" id="hp" value="${esc(q.person || '')}" placeholder="經手過的案件都會列出">\x3C/div>
+    \x3C/div>
+    \x3Cdiv style="display:flex;gap:8px;margin-top:14px">\x3Cbutton class="btn primary" id="hgo" style="flex:1">搜尋\x3C/button>\x3Cbutton class="btn" id="hclear">清除條件\x3C/button>\x3C/div>\x3C/div>
+    \x3Cdiv id="hres">\x3C/div>`;
+  bindTop(() => openHome());
+  document.getElementById('hgo').onclick = () => runSearch(false);
+  document.getElementById('hclear').onclick = () => { S.hist = null; renderHistory(false); };
+  $app.querySelectorAll('.filters input[type=search]').forEach(i => i.onkeydown = e => { if(e.key === 'Enter') runSearch(false); });
+  if(keep && S.hist.total !== null) renderHistResults(); else runSearch(false);
+}
+async function runSearch(more){
+  if(!more){
+    const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    S.hist.q = { status: v('hs') || 'done', store: v('hst'), from: v('hf'), to: v('ht'), brand: v('hb'), model: v('hm'), person: v('hp') };
+    if(S.hist.q.from && S.hist.q.to && S.hist.q.from > S.hist.q.to){ toast('開始日期不能晚於結束日期', true); return; }
+    S.hist.items = []; S.hist.total = null;
+  }
+  busy('搜尋中…');
+  try {
+    const r = await call('searchCases', Object.assign({}, S.hist.q, { offset: S.hist.items.length, token: S.lead ? S.lead.token : '' }));
+    S.hist.items = S.hist.items.concat(r.items); S.hist.total = r.total;
+    busy(); renderHistResults();
+  } catch(e){ busy(); toast(e.message, true); }
+}
+function renderHistResults(){
+  const box = document.getElementById('hres'); if(!box) return;
+  const { items, total } = S.hist;
+  box.innerHTML = `\x3Ch2>搜尋結果（共 ${total} 張）\x3C/h2>${items.length ? items.map(caseCard).join('') : '\x3Cp class="empty">沒有符合條件的案件。\x3C/p>'}
+    ${items.length < total ? `\x3Cbutton class="btn block more" id="hmore">載入更多（已顯示 ${items.length}／${total}）\x3C/button>` : ''}`;
+  box.querySelectorAll('[data-case]').forEach(b => b.onclick = () => { S.backTo = 'history'; openCase(b.dataset.case); });
+  const m = document.getElementById('hmore'); if(m) m.onclick = () => runSearch(true);
 }
 
 /* ---------- 下一步：先選擇、再填寫、最後送出 ---------- */
