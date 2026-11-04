@@ -1,5 +1,5 @@
 // 盤點系統 App 外殼：先抓網路上的最新版，離線時才用快取
-const CACHE = 'inventory-shell-v1';
+const CACHE = 'inventory-shell-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
