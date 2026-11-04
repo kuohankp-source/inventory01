@@ -142,7 +142,7 @@ window.onerror = function(msg, src, line){
 };
 </script>
 <script>
-// ===== 設定：部署後填入這兩個值 =====
+// ===== 設定：部署後填入後台網址 =====
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzOxwYd4IyOH926YWIQYx4Oc7O6aV1EEMzMadR5I41IuxIkIuUwxX02p4Qos0Afy8Jv/exec';        // 後台網頁應用程式網址（/exec 結尾）
 // =====================================
 const DEEP_CASE = (new URLSearchParams(location.search).get('case') || '').replace(/[^A-Za-z0-9\-]/g, '');
@@ -623,7 +623,7 @@ function renderHistory(keep){
       \x3Cdiv>\x3Clabel class="f" for="ht">到\x3C/label>\x3Cinput type="date" id="ht" value="${esc(q.to || '')}">\x3C/div>
       \x3Cdiv>\x3Clabel class="f" for="hb">廠牌\x3C/label>\x3Cselect id="hb">\x3Coption value="">全部廠牌\x3C/option>${(h.brands || []).map(x => `\x3Coption ${q.brand === x ? 'selected' : ''}>${esc(x)}\x3C/option>`).join('')}\x3C/select>\x3C/div>
       \x3Cdiv>\x3Clabel class="f" for="hm">型號或商品編碼\x3C/label>\x3Cinput type="search" id="hm" value="${esc(q.model || '')}" placeholder="例如 803">\x3C/div>
-      \x3Cdiv class="full">\x3Clabel class="f" for="hp">涉及人員（代碼或名字）\x3C/label>\x3Cinput type="search" id="hp" value="${esc(q.person || '')}" placeholder="經手過的案件都會列出">\x3C/div>
+      \x3Cdiv class="full">\x3Clabel class="f" for="hp">相關人員（代碼或名字）\x3C/label>\x3Cinput type="search" id="hp" value="${esc(q.person || '')}">\x3C/div>
     \x3C/div>
     \x3Cdiv style="display:flex;gap:8px;margin-top:14px">\x3Cbutton class="btn primary" id="hgo" style="flex:1">搜尋\x3C/button>\x3Cbutton class="btn" id="hclear">清除條件\x3C/button>\x3C/div>\x3C/div>
     \x3Cdiv id="hres">\x3C/div>`;
