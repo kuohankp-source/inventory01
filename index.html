@@ -114,7 +114,7 @@ window.onerror = function(msg, src, line){
 </script>
 <script>
 // ===== 設定：部署後填入這兩個值 =====
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzOxwYd4IyOH926YWIQYx4Oc7O6aV1EEMzMadR5I41IuxIkIuUwxX02p4Qos0Afy8Jv/exec';        // 後台網頁應用程式網址（/exec 結尾）
+const BACKEND_URL = 'PASTE_BACKEND_URL_HERE';        // 後台網頁應用程式網址（/exec 結尾）
 // =====================================
 const DEEP_CASE = (new URLSearchParams(location.search).get('case') || '').replace(/[^A-Za-z0-9\-]/g, '');
 const S = { home: null, draft: null };
@@ -128,13 +128,21 @@ function signed(n){ n = Number(n) || 0; return n > 0 ? '+' + n : String(n); }
 
 /* ---------- 裝置碼 ---------- */
 // 每間店一組裝置碼；店內裝置第一次使用時輸入，之後記在這台裝置上
-let deviceCode = null, waiters = [], loginEl = null;
+let deviceCode = null, waiters = [], loginEl = null, lastAuthError = '';
 try { deviceCode = localStorage.getItem('inv_device'); } catch(e){}
+// 這台裝置的隨機識別碼：第一次產生後一直保留，用來綁定裝置碼
+let deviceId = null;
+try { deviceId = localStorage.getItem('inv_device_id'); } catch(e){}
+if(!deviceId){
+  const a = new Uint8Array(16); crypto.getRandomValues(a);
+  deviceId = 'd-' + Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+  try { localStorage.setItem('inv_device_id', deviceId); } catch(e){}
+}
 async function post(code, fn, args){
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 60000);
   try {
     const res = await fetch(BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ deviceCode: code, fn, args }), signal: ctrl.signal });
+      body: JSON.stringify({ deviceCode: code, deviceId, fn, args }), signal: ctrl.signal });
     return await res.json();
   } catch(e){
     throw new Error(e.name === 'AbortError' ? '後台超過 60 秒沒有回應，請稍後再試' : '連不到後台，請確認網路，或 BACKEND_URL 是否正確');
@@ -179,12 +187,12 @@ async function call(fn, ...args){
   for(let attempt = 0; attempt < 2; attempt++){
     if(!deviceCode){
       const hadBusy = busyEl ? busyEl.firstChild.textContent : '';
-      busy(); await ensureDevice(attempt ? '裝置碼已失效，請向負責人取得新的裝置碼' : '');
+      busy(); await ensureDevice(attempt ? (lastAuthError || '裝置碼已失效，請向負責人取得新的裝置碼') : '');
       if(hadBusy) busy(hadBusy);
     }
     const out = await post(deviceCode, fn, args);
     if(out.ok) return out.data;
-    if(out.auth && attempt === 0){ deviceCode = null; try { localStorage.removeItem('inv_device'); } catch(e){} continue; }
+    if(out.auth && attempt === 0){ lastAuthError = out.error; deviceCode = null; try { localStorage.removeItem('inv_device'); } catch(e){} continue; }
     throw new Error(out.error || '發生錯誤');
   }
 }
