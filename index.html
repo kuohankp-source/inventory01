@@ -62,7 +62,15 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .items-edit .item.main{border-color:var(--store);border-width:1.5px}
 .items-edit .ihead{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:14px;font-weight:500}
 .items-edit .ihead .sp{flex:1}
-.items-edit .g2{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:6px;margin-bottom:6px}
+.items-edit .g2{display:grid;grid-template-columns:5.2em minmax(0,1fr) minmax(0,1fr);gap:6px;margin-bottom:6px}
+.items-edit select{min-height:42px;padding:8px 6px}
+.q{border-radius:6px;padding:1px 6px;font-weight:600;color:#1B2220;display:inline-block}
+.q.a{background:#F4CCCC}.q.b{background:#B7E8B0}.q.c{background:#B5EEF2}
+.items-edit .g3 input.qa{border-color:#D99A9A;background:#FCEEEE}.items-edit .g3 input.qb{border-color:#7FC676;background:#EBF8E8}.items-edit .g3 input.qc{border-color:#6CCBD3;background:#E7FAFB}
+.qnote{font-size:12.5px;color:var(--muted);margin:8px 2px 0;line-height:1.6}
+th .q{font-size:12px}
+table.items td.n,table.items th.n{text-align:center}
+table.items tr.nm td{border-bottom:0;padding-bottom:0;padding-top:10px}
 .items-edit .g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .items-edit .lab{font-size:12px;color:var(--muted);display:block;margin-bottom:2px}
 .items-edit .ihead label{display:flex;align-items:center;gap:6px;cursor:pointer}
@@ -352,7 +360,7 @@ function ask(opt){
 function caseCard(c){
   const dl = c.deadline ? `\x3Cspan class="${c.overdue ? 'late' : 'm'}">期限 ${day(c.deadline)}${c.overdue ? '（逾期）' : ''}\x3C/span>` : '';
   return `\x3Cbutton class="card case ${esc(c.stage)}" data-case="${esc(c.id)}">\x3Cdiv class="t">\x3Cspan class="id">${esc(c.id)}\x3C/span>\x3Cspan class="chip ${esc(c.stage)}">${esc(c.status)}\x3C/span>${c.stage === '盤點長' && c.progress ? `\x3Cspan class="progress">${esc(c.progress)}\x3C/span>` : ''}${dl}\x3C/div>
-    \x3Cdiv class="m">${esc(c.store)}｜型號 ${esc(c.model)}｜差異 ${signed(c.diff)}｜${esc(c.scene)}・${esc(c.finder)}\x3C/div>\x3C/button>`;
+    \x3Cdiv class="m">${esc(c.store)}｜型號 ${esc(c.model)}｜現貨−系統 ${signed(c.diff)}｜${esc(c.scene)}・${esc(c.finder)}\x3C/div>\x3C/button>`;
 }
 function section(title, list, empty){
   return `\x3Ch2>${esc(title)}（${list.length}）\x3C/h2>${list.length ? list.map(caseCard).join('') : `\x3Cp class="empty">${esc(empty)}\x3C/p>`}`;
@@ -395,7 +403,7 @@ function renderNew(){
       ${pickStore ? `\x3Clabel class="f" for="store">分店\x3C/label>\x3Cselect id="store">\x3Coption value="">請選擇\x3C/option>${h.stores.map(s => `\x3Coption>${esc(s)}\x3C/option>`).join('')}\x3C/select>` : ''}
     \x3C/div>
     \x3Cdiv class="card items-edit">\x3Ch2 style="margin-top:0">可能誤差的品項\x3C/h2>
-      \x3Cp class="empty">每一項都填 SKU、型號、尺寸花色，以及 A 現貨、B 紙本、C 線上（用型號查詢後填入）。\x3Cbr>如果發現其他型號可能被搞混（例如 K803 和 K805 的同色款），請按「加一項」一起填。★ 選數量有問題的那一項。\x3C/p>
+      \x3Cp class="empty">每一項都填商品編碼、廠牌、型號、品名顏色尺寸，以及三個數量：\x3Cspan class="q a">(A) 系統數量\x3C/span> \x3Cspan class="q b">(B) 紙本數量\x3C/span> \x3Cspan class="q c">(C) 現貨數量\x3C/span>。\x3Cbr>如果發現其他型號可能被搞混（例如 K803 和 K805 的同色款），請按「加一項」一起填。★ 選數量有問題的那一項。\x3C/p>
       \x3Cdiv id="rows">\x3C/div>\x3Cbutton class="btn small" id="addrow">＋ 加一項可能混淆的品項\x3C/button>\x3C/div>
     \x3Cdiv class="card">\x3Ch2 style="margin-top:0">照片\x3C/h2>\x3Cdiv id="pgroups">\x3C/div>\x3C/div>
     \x3Cdiv class="card">\x3Clabel class="f" for="note" style="margin-top:0">備註（選填）\x3C/label>\x3Ctextarea id="note">\x3C/textarea>\x3C/div>
@@ -413,15 +421,23 @@ function renumberRows(){
     r.classList.toggle('main', r.querySelector('input[type=radio]').checked);
   });
 }
+function brandOptions(){
+  const list = (S.home && S.home.brands) || [];
+  return `\x3Coption value="">請選擇\x3C/option>${list.map(b => `\x3Coption>${esc(b)}\x3C/option>`).join('')}\x3Coption value="__other">其他（自行填入）\x3C/option>`;
+}
 function addRow(main){
   const r = document.createElement('div'); r.className = 'item';
   r.innerHTML = `\x3Cdiv class="ihead">\x3Cspan class="no">\x3C/span>\x3Clabel>\x3Cinput type="radio" name="main" ${main ? 'checked' : ''}>★ 數量有問題的\x3C/label>\x3Cspan class="sp">\x3C/span>\x3Cbutton class="x" aria-label="刪除這一項">×\x3C/button>\x3C/div>
-    \x3Cdiv class="g2">\x3Clabel>\x3Cspan class="lab">SKU\x3C/span>\x3Cinput type="text" class="sku" autocapitalize="characters" autocomplete="off">\x3C/label>
+    \x3Cdiv class="g2">\x3Clabel>\x3Cspan class="lab">商品編碼\x3C/span>\x3Cinput type="text" class="sku" inputmode="text" maxlength="8" autocapitalize="characters" autocomplete="off">\x3C/label>
+      \x3Clabel>\x3Cspan class="lab">廠牌\x3C/span>\x3Cselect class="brand">${brandOptions()}\x3C/select>\x3C/label>
       \x3Clabel>\x3Cspan class="lab">型號\x3C/span>\x3Cinput type="text" class="model" placeholder="K803" autocapitalize="characters" autocomplete="off">\x3C/label>\x3C/div>
-    \x3Clabel>\x3Cspan class="lab">尺寸花色\x3C/span>\x3Cinput type="text" class="spec" placeholder="素色消光黑 L" style="margin-bottom:6px">\x3C/label>
-    \x3Cdiv class="g3">\x3Clabel>\x3Cspan class="lab">A 現貨\x3C/span>\x3Cinput type="number" inputmode="numeric" class="qa">\x3C/label>
-      \x3Clabel>\x3Cspan class="lab">B 紙本\x3C/span>\x3Cinput type="number" inputmode="numeric" class="qb">\x3C/label>
-      \x3Clabel>\x3Cspan class="lab">C 線上\x3C/span>\x3Cinput type="number" inputmode="numeric" class="qc">\x3C/label>\x3C/div>`;
+    \x3Cinput type="text" class="brand-other" placeholder="請輸入廠牌名稱" hidden style="margin-bottom:6px">
+    \x3Clabel>\x3Cspan class="lab">品名、顏色、尺寸\x3C/span>\x3Cinput type="text" class="spec" placeholder="素色消光黑 L" style="margin-bottom:6px">\x3C/label>
+    \x3Cdiv class="g3">\x3Clabel>\x3Cspan class="lab">\x3Cspan class="q a">(A) 系統數量\x3C/span>\x3C/span>\x3Cinput type="number" inputmode="numeric" class="qa">\x3C/label>
+      \x3Clabel>\x3Cspan class="lab">\x3Cspan class="q b">(B) 紙本數量\x3C/span>\x3C/span>\x3Cinput type="number" inputmode="numeric" class="qb">\x3C/label>
+      \x3Clabel>\x3Cspan class="lab">\x3Cspan class="q c">(C) 現貨數量\x3C/span>\x3C/span>\x3Cinput type="number" inputmode="numeric" class="qc">\x3C/label>\x3C/div>`;
+  const sel = r.querySelector('.brand'), other = r.querySelector('.brand-other');
+  sel.onchange = () => { other.hidden = sel.value !== '__other'; if(!other.hidden) other.focus(); };
   r.querySelector('.x').onclick = () => {
     if(document.querySelectorAll('#rows .item').length <= 1) return;
     const wasMain = r.querySelector('input[type=radio]').checked; r.remove();
@@ -456,11 +472,15 @@ async function submitNew(){
     code: document.getElementById('code').value.trim(),
     scene: document.getElementById('scene').value, store: storeEl ? storeEl.value : '',
     note: document.getElementById('note').value.trim(),
-    items: Array.from(document.querySelectorAll('#rows .item')).map(r => ({
-      main: r.querySelector('input[type=radio]').checked, sku: r.querySelector('.sku').value.trim(),
-      model: r.querySelector('.model').value.trim(), spec: r.querySelector('.spec').value.trim(),
-      A: r.querySelector('.qa').value, B: r.querySelector('.qb').value, C: r.querySelector('.qc').value
-    })).filter(it => it.sku || it.model || it.spec || it.A || it.B || it.C)
+    items: Array.from(document.querySelectorAll('#rows .item')).map(r => {
+      const sel = r.querySelector('.brand').value;
+      return {
+        main: r.querySelector('input[type=radio]').checked, sku: r.querySelector('.sku').value.trim(),
+        brand: sel === '__other' ? r.querySelector('.brand-other').value.trim() : sel,
+        model: r.querySelector('.model').value.trim(), spec: r.querySelector('.spec').value.trim(),
+        sys: r.querySelector('.qa').value, paper: r.querySelector('.qb').value, stock: r.querySelector('.qc').value
+      };
+    }).filter(it => it.sku || it.brand || it.model || it.spec || it.sys || it.paper || it.stock)
   };
   if(!data.code){ err.textContent = '請輸入你的人員代碼'; return; }
   if(!data.scene){ err.textContent = '請選發現情境'; return; }
@@ -468,8 +488,11 @@ async function submitNew(){
   if(!data.items.length){ err.textContent = '至少要填一個品項'; return; }
   for(let i = 0; i < data.items.length; i++){
     const it = data.items[i], n = '品項 ' + (i + 1);
-    if(!it.sku || !it.model || !it.spec){ err.textContent = n + '的 SKU、型號、尺寸花色都要填'; return; }
-    if(it.A === '' || it.B === '' || it.C === ''){ err.textContent = n + '的 A、B、C 都要填數字'; return; }
+    if(!it.sku){ err.textContent = n + '的商品編碼要填'; return; }
+    if(!it.brand){ err.textContent = n + '的廠牌要選擇或填入'; return; }
+    if(!it.model){ err.textContent = n + '的型號要填'; return; }
+    if(!it.spec){ err.textContent = n + '的品名、顏色、尺寸要填'; return; }
+    if(it.sys === '' || it.paper === '' || it.stock === ''){ err.textContent = n + '的 (A) 系統、(B) 紙本、(C) 現貨數量都要填數字'; return; }
   }
   if(!S.draft.photos.some(p => p.type === '紙本頁面')){ err.textContent = '至少要拍一張紙本頁面'; return; }
   let id = null;
@@ -527,8 +550,9 @@ function renderCase(d){
       ${c.closeType ? `\x3Cdt>結案方式\x3C/dt>\x3Cdd>${esc(c.closeType)}\x3C/dd>` : ''}
       ${c.note ? `\x3Cdt>備註\x3C/dt>\x3Cdd style="white-space:pre-wrap">${esc(c.note)}\x3C/dd>` : ''}
     \x3C/dl>\x3C/div>
-    \x3Ch2>可能誤差的品項\x3C/h2>\x3Cdiv class="card" style="overflow-x:auto">\x3Ctable>\x3Cthead>\x3Ctr>\x3Cth>品項\x3C/th>\x3Cth class="n">A\x3C/th>\x3Cth class="n">B\x3C/th>\x3Cth class="n">C\x3C/th>\x3Cth class="n">A−C\x3C/th>\x3C/tr>\x3C/thead>
-      \x3Ctbody>${d.items.map(it => `\x3Ctr>\x3Ctd>${it.main ? '★ ' : ''}\x3Cb>${esc(it.model || '')}\x3C/b> ${esc(it.spec)}${it.sku ? `\x3Cbr>\x3Cspan class="empty" style="font-size:12.5px">SKU ${esc(it.sku)}\x3C/span>` : ''}\x3C/td>\x3Ctd class="n">${esc(it.A)}\x3C/td>\x3Ctd class="n">${esc(it.B)}\x3C/td>\x3Ctd class="n">${esc(it.C)}\x3C/td>\x3Ctd class="n">${signed(it.diff)}\x3C/td>\x3C/tr>`).join('')}\x3C/tbody>\x3C/table>\x3C/div>
+    \x3Ch2>可能誤差的品項\x3C/h2>\x3Cdiv class="card" style="overflow-x:auto">\x3Ctable class="items">\x3Cthead>\x3Ctr>\x3Cth class="n">\x3Cspan class="q a">(A) 系統\x3C/span>\x3C/th>\x3Cth class="n">\x3Cspan class="q b">(B) 紙本\x3C/span>\x3C/th>\x3Cth class="n">\x3Cspan class="q c">(C) 現貨\x3C/span>\x3C/th>\x3Cth class="n">差異\x3C/th>\x3C/tr>\x3C/thead>
+      \x3Ctbody>${d.items.map(it => `\x3Ctr class="nm">\x3Ctd colspan="4">${it.main ? '★ ' : ''}\x3Cb>${esc([it.brand, it.model].filter(Boolean).join(' '))}\x3C/b> ${esc(it.spec)}${it.sku ? `　\x3Cspan class="empty" style="font-size:12.5px">商品編碼 ${esc(it.sku)}\x3C/span>` : ''}\x3C/td>\x3C/tr>\x3Ctr>\x3Ctd class="n">${esc(it.sys)}\x3C/td>\x3Ctd class="n">${esc(it.paper)}\x3C/td>\x3Ctd class="n">${esc(it.stock)}\x3C/td>\x3Ctd class="n">\x3Cb>${signed(it.diff)}\x3C/b>\x3C/td>\x3C/tr>`).join('')}\x3C/tbody>\x3C/table>
+      \x3Cp class="qnote">\x3Cspan class="q a">(A)\x3C/span> 系統數量＝線上系統　\x3Cspan class="q b">(B)\x3C/span> 紙本數量＝存貨本　\x3Cspan class="q c">(C)\x3C/span> 現貨數量＝實際點到\x3Cbr>差異＝(C) 現貨 − (A) 系統；正數表示現貨比系統多。\x3C/p>\x3C/div>
     \x3Ch2>照片（${d.photos.length}）\x3C/h2>\x3Cdiv class="card">
       ${groups.length ? groups.map(([t, l]) => `\x3Cdiv class="pgroup">\x3Ch3>${esc(t)}（${l.length}）\x3C/h3>\x3Cdiv class="photos">${l.map(p => `\x3Cbutton class="ph" data-photo="${esc(p.id)}" aria-label="放大照片">\x3Cimg src="${esc(p.thumb)}" alt="">\x3C/button>`).join('')}\x3C/div>\x3C/div>`).join('') : '\x3Cp class="empty">還沒有照片。\x3C/p>'}
       ${final ? '' : `\x3Cdiv class="pgroup">\x3Ch3>加照片\x3C/h3>\x3Cdiv style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
