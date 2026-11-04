@@ -84,6 +84,11 @@ table.items tr.nm td{border-bottom:0;padding-bottom:0;padding-top:10px}
 .photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:8px}
 .ph{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--line);border:0;padding:0;cursor:pointer}
 .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .num{position:absolute;left:4px;top:4px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:rgba(0,0,0,.65);color:#fff;font-size:12.5px;font-weight:700;line-height:22px;text-align:center}
+.ph .ptag{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tlph{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));margin-top:8px}
+details.allph{margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+details.allph summary{cursor:pointer;font-weight:500;padding:4px 0}
 .ph .rm{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:0;border-radius:50%;width:26px;height:26px;cursor:pointer}
 .pgroup{margin-top:12px}
 .pgroup h3{font-size:14px;margin:0;color:var(--muted);font-weight:500}
@@ -535,14 +540,29 @@ async function openCase(id){
   } catch(e){ busy(); toast(e.message, true); if(S.home) renderHome(); else fatal(e.message); }
 }
 function defaultPhotoType(status){
+  if(S.lead) return '盤點長說明';
   if(status === '待門市補拍') return '補拍';
   if(status === '待門市複點') return '複點';
   return '紙本頁面';
+}
+// 照片屬於「同一個人上傳後，送出的下一個步驟」；還沒送出的列為「尚未送出」
+const NOT_A_STEP = ['建立草稿', '紙本已修改'];
+function attachPhotos(d){
+  const byEvent = d.events.map(() => []), pending = [];
+  d.photos.forEach(p => {
+    const i = d.events.findIndex(e => e.code === p.code && NOT_A_STEP.indexOf(e.action) < 0 && new Date(e.at) >= new Date(p.at));
+    if(i >= 0) byEvent[i].push(p); else pending.push(p);
+  });
+  return { byEvent, pending };
+}
+function photoThumb(p){
+  return `\x3Cbutton class="ph" data-photo="${esc(p.id)}" aria-label="放大照片 #${p.num}">\x3Cimg src="${esc(p.thumb)}" alt="">\x3Cspan class="num">#${p.num}\x3C/span>\x3Cspan class="ptag">${esc(p.type)}\x3C/span>\x3C/button>`;
 }
 function renderCase(d){
   S.view = { type: 'case', id: d.c.id };
   const c = d.c, final = c.status === '已結案' || c.status === '已撤銷', draft = c.status === '草稿';
   const groups = d.photoTypes.map(t => [t, d.photos.filter(p => p.type === t)]).filter(([, l]) => l.length);
+  const att = attachPhotos(d);
   const lastReq = [...d.events].reverse().find(e => e.action === '退回補拍' || e.action === '退回門市補拍');
   $app.innerHTML = topBar(true) + `
     \x3Ch1>${esc(c.id)}\x3C/h1>
@@ -561,13 +581,14 @@ function renderCase(d){
     \x3Ch2>可能誤差的品項\x3C/h2>\x3Cdiv class="card" style="overflow-x:auto">\x3Ctable class="items">\x3Cthead>\x3Ctr>\x3Cth class="n">\x3Cspan class="q a">(A) 系統\x3C/span>\x3C/th>\x3Cth class="n">\x3Cspan class="q b">(B) 紙本\x3C/span>\x3C/th>\x3Cth class="n">\x3Cspan class="q c">(C) 現貨\x3C/span>\x3C/th>\x3Cth class="n">差異\x3C/th>\x3C/tr>\x3C/thead>
       \x3Ctbody>${d.items.map(it => `\x3Ctr class="nm">\x3Ctd colspan="4">${it.main ? '★ ' : ''}\x3Cb>${esc([it.brand, it.model].filter(Boolean).join(' '))}\x3C/b> ${esc(it.spec)}${it.sku ? `　\x3Cspan class="empty" style="font-size:12.5px">商品編碼 ${esc(it.sku)}\x3C/span>` : ''}\x3C/td>\x3C/tr>\x3Ctr>\x3Ctd class="n">${esc(it.sys)}\x3C/td>\x3Ctd class="n">${esc(it.paper)}\x3C/td>\x3Ctd class="n">${esc(it.stock)}\x3C/td>\x3Ctd class="n">\x3Cb>${signed(it.diff)}\x3C/b>\x3C/td>\x3C/tr>`).join('')}\x3C/tbody>\x3C/table>
       \x3Cp class="qnote">\x3Cspan class="q a">(A)\x3C/span> 系統數量＝線上系統　\x3Cspan class="q b">(B)\x3C/span> 紙本數量＝存貨本　\x3Cspan class="q c">(C)\x3C/span> 現貨數量＝實際點到\x3Cbr>差異＝(C) 現貨 − (A) 系統；正數表示現貨比系統多。\x3C/p>\x3C/div>
+    \x3Ch2>處理紀錄\x3C/h2>\x3Cdiv class="card">\x3Cul class="tl">${d.events.map((e, i) => `\x3Cli>\x3Cdiv class="w">${when(e.at)}・${esc(e.by)}${e.device ? '・' + esc(e.device) : ''}\x3C/div>\x3Cb>${esc(e.action)}\x3C/b>${e.to && e.to !== e.from ? `\x3Cspan class="empty">　→ ${esc(e.to)}\x3C/span>` : ''}${e.content ? `\x3Cp>${esc(e.content)}\x3C/p>` : ''}${att.byEvent[i] && att.byEvent[i].length ? `\x3Cdiv class="photos tlph">${att.byEvent[i].map(photoThumb).join('')}\x3C/div>` : ''}\x3C/li>`).join('')}\x3C/ul>\x3C/div>
     \x3Ch2>照片（${d.photos.length}）\x3C/h2>\x3Cdiv class="card">
-      ${groups.length ? groups.map(([t, l]) => `\x3Cdiv class="pgroup">\x3Ch3>${esc(t)}（${l.length}）\x3C/h3>\x3Cdiv class="photos">${l.map(p => `\x3Cbutton class="ph" data-photo="${esc(p.id)}" aria-label="放大照片">\x3Cimg src="${esc(p.thumb)}" alt="">\x3C/button>`).join('')}\x3C/div>\x3C/div>`).join('') : '\x3Cp class="empty">還沒有照片。\x3C/p>'}
-      ${final ? '' : `\x3Cdiv class="pgroup">\x3Ch3>加照片\x3C/h3>\x3Cdiv style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
-        \x3Cselect id="ptype" style="width:auto">${d.photoTypes.map(t => `\x3Coption ${t === defaultPhotoType(c.status) ? 'selected' : ''}>${esc(t)}\x3C/option>`).join('')}\x3C/select>
+      ${att.pending.length ? `\x3Cdiv class="pgroup" style="margin-top:0">\x3Ch3>已上傳、尚未送出（會附在上傳者送出的下一步）\x3C/h3>\x3Cdiv class="photos">${att.pending.map(photoThumb).join('')}\x3C/div>\x3C/div>` : ''}
+      ${d.photos.length ? `\x3Cdetails class="allph"${att.pending.length ? '' : ' style="margin-top:0"'}>\x3Csummary>所有照片（${d.photos.length}）\x3C/summary>${groups.map(([t, l]) => `\x3Cdiv class="pgroup">\x3Ch3>${esc(t)}（${l.length}）\x3C/h3>\x3Cdiv class="photos">${l.map(photoThumb).join('')}\x3C/div>\x3C/div>`).join('')}\x3C/details>` : '\x3Cp class="empty" style="margin-top:0">還沒有照片。\x3C/p>'}
+      ${final ? '' : `\x3Cdiv class="pgroup">\x3Ch3>加照片\x3C/h3>\x3Cp class="empty" style="margin:2px 0 0;font-size:13px">照片會附在你接下來送出的那一步，並依上傳順序編號。\x3C/p>\x3Cdiv style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+        \x3Cselect id="ptype" style="width:auto">${d.photoTypes.filter(t => S.lead || t !== '盤點長說明').map(t => `\x3Coption ${t === defaultPhotoType(c.status) ? 'selected' : ''}>${esc(t)}\x3C/option>`).join('')}\x3C/select>
         \x3Clabel class="btn small file">＋ 拍照或選照片\x3Cinput type="file" accept="image/*" multiple id="pfile">\x3C/label>\x3C/div>\x3C/div>`}
     \x3C/div>
-    \x3Ch2>處理紀錄\x3C/h2>\x3Cdiv class="card">\x3Cul class="tl">${d.events.map(e => `\x3Cli>\x3Cdiv class="w">${when(e.at)}・${esc(e.by)}${e.device ? '・' + esc(e.device) : ''}\x3C/div>\x3Cb>${esc(e.action)}\x3C/b>${e.to && e.to !== e.from ? `\x3Cspan class="empty">　→ ${esc(e.to)}\x3C/span>` : ''}${e.content ? `\x3Cp>${esc(e.content)}\x3C/p>` : ''}\x3C/li>`).join('')}\x3C/ul>\x3C/div>
     \x3Cp>\x3Cbutton class="link" id="reload">重新整理\x3C/button>\x3C/p>
     ${draft ? `\x3Cdiv class="actions">\x3Cbutton class="btn primary" id="finalize">送出盤點單\x3C/button>\x3C/div>` : final ? '' : nextStepHtml(c, d)}`;
   bindTop(() => { if(S.backTo === 'history'){ S.backTo = null; renderHistory(true); } else openHome(); });
@@ -584,13 +605,13 @@ function renderCase(d){
   if(pfile) pfile.onchange = async () => {
     const files = Array.from(pfile.files || []); if(!files.length) return;
     const type = document.getElementById('ptype').value;
-    const r = await ask({ title: `上傳 ${files.length} 張「${type}」照片`, okLabel: '上傳' });
+    const r = S.lead ? { code: '' } : await ask({ title: `上傳 ${files.length} 張「${type}」照片`, okLabel: '上傳' });
     if(!r){ pfile.value = ''; return; }
     try {
       for(let i = 0; i < files.length; i++){
         busy(`上傳照片 ${i + 1}／${files.length}…`);
         const im = await makeImages(files[i]);
-        await call('uploadPhoto', c.id, r.code, type, im.full, im.thumb);
+        await call('uploadPhoto', c.id, r.code, type, im.full, im.thumb, S.lead ? S.lead.token : '');
       }
       busy(); toast('照片已上傳');
     } catch(e){ busy(); toast(e.message, true); }
