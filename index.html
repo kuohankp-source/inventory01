@@ -100,6 +100,15 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .lightbox img{max-width:96vw;max-height:88vh;border-radius:6px}
 .busy{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:30}
 .busy div{background:var(--card);padding:16px 22px;border-radius:12px;font-weight:500}
+.leadbar{display:flex;align-items:center;gap:10px;background:var(--lead);color:#fff;border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:14.5px}
+.leadbar b{font-weight:700}.leadbar .sp{flex:1}.leadbar button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:8px;padding:5px 12px;cursor:pointer;font-weight:500}
+.next{margin-top:18px}
+.choices{display:flex;flex-wrap:wrap;gap:8px}
+.choice{border:1.5px solid var(--line);background:var(--bg);color:var(--muted);border-radius:10px;padding:9px 14px;min-height:44px;cursor:pointer;font-weight:500}
+.choice[aria-pressed="true"]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.choice.danger[aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:#fff}
+.actform{margin-top:12px;border-top:1px solid var(--line);padding-top:4px}
+.progress{display:inline-block;font-size:13px;color:var(--lead);font-weight:500;margin-left:6px}
 .login{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
 .login .box{max-width:360px;width:100%;text-align:center}
 .login p{color:var(--muted)}
@@ -124,7 +133,13 @@ window.onerror = function(msg, src, line){
 const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzOxwYd4IyOH926YWIQYx4Oc7O6aV1EEMzMadR5I41IuxIkIuUwxX02p4Qos0Afy8Jv/exec';        // 後台網頁應用程式網址（/exec 結尾）
 // =====================================
 const DEEP_CASE = (new URLSearchParams(location.search).get('case') || '').replace(/[^A-Za-z0-9\-]/g, '');
-const S = { home: null, draft: null };
+const S = { home: null, draft: null, lead: null, view: null };
+// 盤點長／老闆登入：只存在這次開啟的 App 裡；30 分鐘沒有操作就自動登出
+const LEAD_IDLE_MS = 30 * 60 * 1000;
+let lastActive = Date.now();
+try { const l = JSON.parse(sessionStorage.getItem('inv_lead') || 'null'); if(l) S.lead = l; } catch(e){}
+['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
+setInterval(() => { if(S.lead && Date.now() - lastActive > LEAD_IDLE_MS){ leadLogout(true); } }, 30000);
 const $app = document.getElementById('app');
 
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -206,6 +221,7 @@ async function call(fn, ...args){
     }
     const out = await post(deviceCode, fn, args);
     if(out.ok) return out.data;
+    if(out.session){ clearLead(); refreshView(); throw new Error(out.error || '盤點長登入已逾時，請重新登入'); }
     if(out.auth && attempt === 0){ lastAuthError = out.error; deviceCode = null; try { localStorage.removeItem('inv_device'); } catch(e){} continue; }
     throw new Error(out.error || '發生錯誤');
   }
@@ -250,11 +266,51 @@ function fatal(msg){
 function topBar(back){
   const a = S.home && S.home.account;
   const who = a ? (a.device || (a.store === '全部' ? '管理帳號' : a.store)) : '';
-  return `\x3Cdiv class="bar">${back ? '\x3Cbutton class="btn small" id="back">← 返回\x3C/button>' : ''}\x3Cspan class="sp">\x3C/span>\x3Cspan>\x3Cb>${esc(who)}\x3C/b>\x3C/span>${back ? '' : '\x3Cbutton class="link" id="signout">重設裝置碼\x3C/button>'}\x3C/div>`;
+  const bar = `\x3Cdiv class="bar">${back ? '\x3Cbutton class="btn small" id="back">← 返回\x3C/button>' : ''}\x3Cspan class="sp">\x3C/span>\x3Cspan>\x3Cb>${esc(who)}\x3C/b>\x3C/span>${S.lead ? '' : '\x3Cbutton class="link" id="leadin">盤點長／老闆登入\x3C/button>'}${back ? '' : '\x3Cbutton class="link" id="signout">重設裝置碼\x3C/button>'}\x3C/div>`;
+  const lb = S.lead ? `\x3Cdiv class="leadbar">\x3Cspan>${esc(S.lead.role)}模式：\x3Cb>${esc(S.lead.name)}\x3C/b>\x3C/span>\x3Cspan class="sp">\x3C/span>\x3Cbutton id="leadout">登出\x3C/button>\x3C/div>` : '';
+  return bar + lb;
 }
-function bindTop(back){ const b = document.getElementById('back'); if(b) b.onclick = back; const so = document.getElementById('signout'); if(so) so.onclick = () => { if(confirm('要清除這台裝置的裝置碼嗎？清除後需要重新輸入。')) resetDevice(); }; }
+function bindTop(back){
+  const b = document.getElementById('back'); if(b) b.onclick = back;
+  const so = document.getElementById('signout'); if(so) so.onclick = () => { if(confirm('要清除這台裝置的裝置碼嗎？清除後需要重新輸入。')) resetDevice(); };
+  const li = document.getElementById('leadin'); if(li) li.onclick = leadLogin;
+  const lo = document.getElementById('leadout'); if(lo) lo.onclick = () => leadLogout(false);
+}
+function refreshView(){
+  if(S.view && S.view.type === 'case') openCase(S.view.id); else if(S.home) renderHome();
+}
+function clearLead(){ S.lead = null; try { sessionStorage.removeItem('inv_lead'); } catch(e){} }
+function leadLogin(){
+  const o = document.createElement('div'); o.className = 'overlay';
+  o.innerHTML = `\x3Cdiv class="sheet" role="dialog" aria-label="盤點長／老闆登入">\x3Ch2>盤點長／老闆登入\x3C/h2>
+    \x3Cp class="empty">登入後，這台裝置會顯示盤點長（或老闆）的操作，送出時不用再輸入代碼和密碼。30 分鐘沒有操作、或關掉 App，就會自動登出。\x3C/p>
+    \x3Cdiv style="display:flex;gap:8px">\x3Cdiv style="flex:1">\x3Clabel class="f" for="lcode">人員代碼\x3C/label>\x3Cinput type="text" id="lcode" autocomplete="off" autocapitalize="characters">\x3C/div>
+    \x3Cdiv style="flex:1">\x3Clabel class="f" for="lpin">密碼\x3C/label>\x3Cinput type="password" id="lpin" autocomplete="off">\x3C/div>\x3C/div>
+    \x3Cdiv class="err-text" id="lerr">\x3C/div>
+    \x3Cdiv class="row2">\x3Cbutton class="btn" id="lcancel">取消\x3C/button>\x3Cbutton class="btn primary" id="lok">登入\x3C/button>\x3C/div>\x3C/div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if(e.target === o) o.remove(); };
+  document.getElementById('lcancel').onclick = () => o.remove();
+  document.getElementById('lcode').focus();
+  document.getElementById('lok').onclick = async () => {
+    const code = document.getElementById('lcode').value.trim(), pin = document.getElementById('lpin').value.trim();
+    if(!code || !pin){ document.getElementById('lerr').textContent = '請輸入代碼和密碼'; return; }
+    busy('登入中…');
+    try {
+      const r = await call('leadLogin', code, pin);
+      S.lead = { token: r.token, name: r.name, role: r.role }; lastActive = Date.now();
+      try { sessionStorage.setItem('inv_lead', JSON.stringify(S.lead)); } catch(e){}
+      busy(); o.remove(); toast(`已進入${r.role}模式`); refreshView();
+    } catch(e){ busy(); document.getElementById('lerr').textContent = e.message; }
+  };
+}
+async function leadLogout(auto){
+  const t = S.lead && S.lead.token; clearLead();
+  if(t) post(deviceCode, 'leadLogout', [t]).catch(() => {});
+  toast(auto ? '閒置超過 30 分鐘，已自動登出盤點長模式' : '已登出');
+  refreshView();
+}
 
-// 通用的填寫視窗：每個動作都要填人員代碼；盤點長、老闆的動作多一格密碼
 function ask(opt){
   return new Promise(resolve => {
     const fields = opt.fields || [];
@@ -295,7 +351,7 @@ function ask(opt){
 /* ---------- 首頁 ---------- */
 function caseCard(c){
   const dl = c.deadline ? `\x3Cspan class="${c.overdue ? 'late' : 'm'}">期限 ${day(c.deadline)}${c.overdue ? '（逾期）' : ''}\x3C/span>` : '';
-  return `\x3Cbutton class="card case ${esc(c.stage)}" data-case="${esc(c.id)}">\x3Cdiv class="t">\x3Cspan class="id">${esc(c.id)}\x3C/span>\x3Cspan class="chip ${esc(c.stage)}">${esc(c.status)}\x3C/span>${dl}\x3C/div>
+  return `\x3Cbutton class="card case ${esc(c.stage)}" data-case="${esc(c.id)}">\x3Cdiv class="t">\x3Cspan class="id">${esc(c.id)}\x3C/span>\x3Cspan class="chip ${esc(c.stage)}">${esc(c.status)}\x3C/span>${c.stage === '盤點長' && c.progress ? `\x3Cspan class="progress">${esc(c.progress)}\x3C/span>` : ''}${dl}\x3C/div>
     \x3Cdiv class="m">${esc(c.store)}｜型號 ${esc(c.model)}｜差異 ${signed(c.diff)}｜${esc(c.scene)}・${esc(c.finder)}\x3C/div>\x3C/button>`;
 }
 function section(title, list, empty){
@@ -307,6 +363,7 @@ async function openHome(){
   catch(e){ busy(); fatal(e.message); }
 }
 function renderHome(){
+  S.view = { type: 'home' };
   const h = S.home;
   const storeTitle = h.account.store === '全部' ? '門市待辦' : '本店待辦';
   $app.innerHTML = topBar(false) + `
@@ -452,13 +509,14 @@ function defaultPhotoType(status){
   return '紙本頁面';
 }
 function renderCase(d){
+  S.view = { type: 'case', id: d.c.id };
   const c = d.c, final = c.status === '已結案' || c.status === '已撤銷', draft = c.status === '草稿';
   const groups = d.photoTypes.map(t => [t, d.photos.filter(p => p.type === t)]).filter(([, l]) => l.length);
-  const lastReq = [...d.events].reverse().find(e => e.action === '退回補拍');
+  const lastReq = [...d.events].reverse().find(e => e.action === '退回補拍' || e.action === '退回門市補拍');
   $app.innerHTML = topBar(true) + `
     \x3Ch1>${esc(c.id)}\x3C/h1>
     \x3Cp>\x3Cspan class="chip ${final ? 'done' : esc(c.stage)}">${esc(c.status)}\x3C/span>
-      ${c.deadline && !final ? `　\x3Cspan class="${c.overdue ? 'late' : 'empty'}">期限 ${when(c.deadline)}${c.overdue ? '（逾期）' : ''}\x3C/span>` : ''}\x3C/p>
+      ${c.deadline && !final ? `　\x3Cspan class="${c.overdue ? 'late' : 'empty'}">期限 ${when(c.deadline)}${c.overdue ? '（逾期）' : ''}\x3C/span>` : ''}${c.stage === '盤點長' && c.progress ? `\x3Cbr>\x3Cspan class="empty">最新進度：\x3Cb style="color:var(--lead)">${esc(c.progress)}\x3C/b>\x3C/span>` : ''}\x3C/p>
     ${draft ? `\x3Cdiv class="notice warn">這張盤點單還沒送出。確認至少有一張「紙本頁面」照片後，按下方「送出盤點單」。\x3C/div>` : ''}
     ${c.status === '待門市補拍' && lastReq ? `\x3Cdiv class="notice warn">\x3Cb>盤點長的補拍要求\x3C/b>\x3Cp style="margin:4px 0 0;white-space:pre-wrap">${esc(lastReq.content)}\x3C/p>\x3C/div>` : ''}
     ${!draft && !final && !c.paperDone ? `\x3Cdiv class="notice">紙本還沒標記為已修改。\x3Cbutton class="btn small" id="paper" style="margin-left:8px">紙本已修改\x3C/button>\x3C/div>` : ''}
@@ -479,8 +537,7 @@ function renderCase(d){
     \x3C/div>
     \x3Ch2>處理紀錄\x3C/h2>\x3Cdiv class="card">\x3Cul class="tl">${d.events.map(e => `\x3Cli>\x3Cdiv class="w">${when(e.at)}・${esc(e.by)}${e.device ? '・' + esc(e.device) : ''}\x3C/div>\x3Cb>${esc(e.action)}\x3C/b>${e.to && e.to !== e.from ? `\x3Cspan class="empty">　→ ${esc(e.to)}\x3C/span>` : ''}${e.content ? `\x3Cp>${esc(e.content)}\x3C/p>` : ''}\x3C/li>`).join('')}\x3C/ul>\x3C/div>
     \x3Cp>\x3Cbutton class="link" id="reload">重新整理\x3C/button>\x3C/p>
-    ${draft ? `\x3Cdiv class="actions">\x3Cbutton class="btn primary" id="finalize">送出盤點單\x3C/button>\x3C/div>`
-      : d.actions.length ? `\x3Cdiv class="actions">${d.actions.slice().sort((x, y) => (x.role === '門市' ? 0 : 1) - (y.role === '門市' ? 0 : 1)).map(a => `\x3Cbutton class="btn ${a.danger ? 'danger' : 'primary'}" data-act="${esc(a.key)}">${esc(a.label)}${a.role !== '門市' ? `\x3Cspan class="rt">${esc(a.role)}\x3C/span>` : ''}\x3C/button>`).join('')}\x3C/div>` : ''}`;
+    ${draft ? `\x3Cdiv class="actions">\x3Cbutton class="btn primary" id="finalize">送出盤點單\x3C/button>\x3C/div>` : final ? '' : nextStepHtml(c, d)}`;
   bindTop(() => openHome());
   document.getElementById('reload').onclick = () => openCase(c.id);
   $app.querySelectorAll('[data-photo]').forEach(b => b.onclick = () => openPhoto(b.dataset.photo, b.querySelector('img').src));
@@ -514,14 +571,63 @@ function renderCase(d){
     if(r) renderSubmitted(c.id, r.code);
   };
 
-  $app.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
-    const a = d.actions.find(x => x.key === b.dataset.act);
-    const r = await ask({
-      title: `${a.label}｜${c.id}`, fields: a.fields, needPin: a.role !== '門市', danger: a.danger,
-      text: a.fields.length ? '' : '確定要執行嗎？', okLabel: `確定${a.label}`,
-      run: (values, code, pin) => call('doAction', c.id, a.key, values, code, pin)
-    });
-    if(r){ toast(`已${a.label}`); openCase(c.id); }
+  bindNextStep(c, d);
+}
+
+/* ---------- 下一步：先選擇、再填寫、最後送出 ---------- */
+function canDo(role){
+  if(role === '門市') return !S.lead;
+  if(!S.lead) return false;
+  if(role === '盤點長') return S.lead.role === '盤點長' || S.lead.role === '老闆';
+  if(role === '老闆') return S.lead.role === '老闆';
+  return false;
+}
+function visibleActions(d){ return d.actions.filter(a => canDo(a.role)); }
+function nextStepHtml(c, d){
+  const acts = visibleActions(d);
+  let hint = '';
+  if(!acts.length){
+    if(!S.lead && c.stage !== '門市') hint = `目前等待${esc(c.stage)}處理。${esc(c.stage)}請按右上角「盤點長／老闆登入」後操作。`;
+    else if(S.lead && c.stage === '門市') hint = '目前輪到門市處理，請登出盤點長模式後，由門市同仁操作。';
+    else hint = '目前沒有可以執行的動作。';
+    return `\x3Cdiv class="card next">\x3Ch2 style="margin-top:0">下一步\x3C/h2>\x3Cp class="empty">${hint}\x3C/p>\x3C/div>`;
+  }
+  const leadHub = S.lead && c.stage === '盤點長' && !acts.some(a => a.key === 'close');
+  return `\x3Cdiv class="card next">\x3Ch2 style="margin-top:0">下一步\x3C/h2>
+    \x3Cp class="empty" style="margin-top:0">請先選擇要做的事，填寫後按「送出」。${leadHub ? '門市複點一致之後，這裡才會出現「結案」。' : ''}\x3C/p>
+    \x3Cdiv class="choices">${acts.map(a => `\x3Cbutton class="choice${a.danger ? ' danger' : ''}" data-choice="${esc(a.key)}" aria-pressed="false">${esc(a.label)}\x3C/button>`).join('')}\x3C/div>
+    \x3Cdiv class="actform" id="actform" hidden>\x3C/div>\x3C/div>`;
+}
+function bindNextStep(c, d){
+  const form = document.getElementById('actform'); if(!form) return;
+  const acts = visibleActions(d);
+  $app.querySelectorAll('[data-choice]').forEach(btn => btn.onclick = () => {
+    $app.querySelectorAll('[data-choice]').forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    const a = acts.find(x => x.key === btn.dataset.choice);
+    const store = a.role === '門市';
+    form.hidden = false;
+    form.innerHTML = `${a.fields.map((f, i) => `\x3Clabel class="f" for="nf${i}">${esc(f.label)}\x3C/label>${f.multiline ? `\x3Ctextarea id="nf${i}">\x3C/textarea>` : `\x3Cinput type="text" id="nf${i}">`}`).join('')}
+      ${store ? `\x3Clabel class="f" for="ncode">你的人員代碼\x3C/label>\x3Cinput type="text" id="ncode" autocomplete="off" autocapitalize="characters" style="max-width:200px">` : ''}
+      \x3Cdiv class="err-text" id="nerr2">\x3C/div>
+      \x3Cbutton class="btn ${a.danger ? 'danger' : 'primary'} block" id="nsend" style="margin-top:12px">送出：${esc(a.label)}\x3C/button>`;
+    const first = form.querySelector('textarea,input'); if(first) first.focus();
+    document.getElementById('nsend').onclick = async () => {
+      const err = document.getElementById('nerr2'); err.textContent = '';
+      const values = {};
+      for(let i = 0; i < a.fields.length; i++){
+        const v = document.getElementById('nf' + i).value.trim();
+        if(a.fields[i].required && !v){ err.textContent = `請填寫「${a.fields[i].label}」`; return; }
+        values[a.fields[i].key] = v;
+      }
+      const code = store ? document.getElementById('ncode').value.trim() : '';
+      if(store && !code){ err.textContent = '請輸入你的人員代碼'; return; }
+      if(a.danger && !confirm(`確定要${a.label}嗎？`)) return;
+      busy('送出中…');
+      try {
+        await call('doAction', c.id, a.key, values, code, '', store ? '' : S.lead.token);
+        busy(); toast(`已送出：${a.label}`); openCase(c.id);
+      } catch(e){ busy(); err.textContent = e.message; }
+    };
   });
 }
 
